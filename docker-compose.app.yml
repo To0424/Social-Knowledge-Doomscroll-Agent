@@ -1,0 +1,37 @@
+# API server + admin dashboard.
+# Usage: docker compose -f docker-compose.yml -f docker-compose.app.yml up -d
+services:
+  api:
+    build: .
+    restart: unless-stopped
+    entrypoint: []
+    command: ["uvicorn", "api:app", "--host", "0.0.0.0", "--port", "8000"]
+    environment:
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: ${POSTGRES_DB:-socialscope}
+      POSTGRES_USER: ${POSTGRES_USER:-socialscope}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changeme}
+      OLLAMA_BASE_URL: http://ollama:11434
+      LLM_MODEL: ${LLM_MODEL:-gemma4:e2b}
+      MAX_SCROLLS: ${MAX_SCROLLS:-10}
+      HEADLESS: "true"
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./auth:/app/auth
+    depends_on:
+      postgres:
+        condition: service_healthy
+      ollama:
+        condition: service_started
+
+  web:
+    build: ./web
+    restart: unless-stopped
+    environment:
+      NEXT_PUBLIC_API_URL: http://api:8000
+    ports:
+      - "3000:3000"
+    depends_on:
+      - api

@@ -1,0 +1,22 @@
+# Task Manager — polls the schedules table and dispatches due tasks
+# (scrape_x, analyze_sentiment).
+# Usage: docker compose -f docker-compose.yml -f docker-compose.scheduler.yml up -d
+services:
+  scheduler:
+    build: .
+    restart: unless-stopped
+    command: ["python", "-m", "task_manager.runner"]
+    environment:
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: ${POSTGRES_DB:-socialscope}
+      POSTGRES_USER: ${POSTGRES_USER:-socialscope}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changeme}
+      OLLAMA_BASE_URL: http://ollama:11434
+      LLM_MODEL: ${LLM_MODEL:-gemma4:e2b}
+      WORKER_POLL_INTERVAL: ${WORKER_POLL_INTERVAL:-30}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      ollama:
+        condition: service_started
