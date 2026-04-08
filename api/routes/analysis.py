@@ -1,7 +1,6 @@
 """Analysis route — summarise / consolidate tweets for a target + date range."""
 
 import logging
-from typing import Optional
 
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
@@ -86,7 +85,7 @@ def run_analysis(body: AnalysisRequest):
 
 
 @router.get("", response_model=list[AnalysisListItem])
-def list_analyses(target_id: Optional[int] = Query(None)):
+def list_analyses(target_id: int | None = Query(None)):
     """List past analysis records, optionally filtered by target."""
     with get_db() as db:
         rows = db.get_analyses(target_id=target_id)

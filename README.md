@@ -75,8 +75,6 @@ All generated analyses are saved with timestamps and can be reviewed from the **
 ### 1. Clone and configure
 
 ```bash
-git clone https://github.com/your-username/socialscope.git
-cd socialscope
 cp .env.example .env
 ```
 
@@ -184,9 +182,9 @@ Each task can be toggled on/off, have its interval changed, or be triggered manu
 
 3. **Sentiment Analysis**: Unanalyzed tweets are batched (chunks of 10) and sent to Ollama for sentiment scoring (-1.0 to 1.0), labeling (positive/negative/neutral), and topic categorization.
 
-4. **On-Demand Analysis**: The user selects a target + date range. The API fetches up to 50 tweets from that window and sends them to Ollama with a structured prompt. The model returns a Markdown summary that is saved to the database.
+4. **On-Demand Analysis**: The user selects a target + date range. The API fetches matching tweets from the database and sends the 50 most recent to Ollama with a structured prompt. The model returns a Markdown summary that is saved to the database.
 
-5. **Task Scheduler**: `task_manager/runner.py` polls the `schedules` table every 30 seconds. When a task is due, it dispatches it from the `TASK_REGISTRY`. Default intervals: scrape (1h), sentiment (30m). Intervals and active state are adjustable via the dashboard.
+5. **Task Scheduler**: `task_manager/runner.py` polls the `schedules` table every 15 seconds (configurable via `WORKER_POLL_INTERVAL`, default 30 in Docker). When a task is due, it dispatches it from the `TASK_REGISTRY`. Default intervals: scrape (1h), sentiment (30m). Intervals and active state are adjustable via the dashboard.
 
 ---
 
@@ -225,31 +223,23 @@ X has no public API for free-tier users. We use `auth_token` + `ct0` cookies exp
 ## Architecture
 
 ```
-┌────────────────────────────────────────────────────────────────┐
-│                        Docker Network                          │
-│                                                                │
-│   ┌───────────┐    ┌───────────┐    ┌──────────────────────┐  │
-│   │  Next.js   │───▶│  FastAPI   │───▶│     PostgreSQL       │  │
-│   │  (web)     │    │  (api)     │    │  targets · tweets    │  │
-│   │  :3000     │    │  :8000     │    │  analyses · settings │  │
-│   └───────────┘    └─────┬─────┘    │  schedules            │  │
-│                          │          └──────────────────────┘  │
-│                          │                                     │
-│                          ▼                                     │
-│                    ┌───────────┐                               │
-│                    │  Ollama    │                               │
-│                    │ (gemma4)   │                               │
-│                    │  :11434    │                               │
-│                    └───────────┘                               │
-│                          ▲                                     │
-│                          │                                     │
-│                    ┌───────────┐                               │
-│                    │ Scheduler  │                               │
-│                    │ (tasks)    │                               │
-│                    │ scrape +   │                               │
-│                    │ sentiment  │                               │
-│                    └───────────┘                               │
-└────────────────────────────────────────────────────────────────┘
+┌────────────────────────────────────────────────────────────────────────┐
+│                          Docker Network                                │
+│                                                                        │
+│   ┌───────────┐       ┌───────────┐      ┌──────────────────────────┐  │
+│   │  Next.js  │ ───▶ |  FastAPI  │ ───▶ │       PostgreSQL         │  │
+│   │  (web)    │       │  (api)    │      │  targets · tweets        │  │
+│   │  :3000    │       │  :8000    │ ◀──  │  analyses setting       │  │
+│   └───────────┘       └─────┬─────┘      │  schedules               │  │
+│                          │               └────────────▲─────────────┘  │
+│                          │                            │                │
+│                          ▼                            │                │
+│                    ┌──────────┐           ┌───────────┐                │
+│                    │  Ollama  │ ◀──────── │ Scheduler │──────▶ X.com  │
+│                    │ (gemma4) │           │ scrape    │                │
+│                    │  :11434  │           │ sentiment │                │
+│                    └──────────┘           └───────────┘                │
+└────────────────────────────────────────────────────────────────────────┘
 ```
 
 **Data flow:**
@@ -315,6 +305,14 @@ X has no public API for free-tier users. We use `auth_token` + `ct0` cookies exp
 |--------|----------|-------------|
 | `POST` | `/api/scrape` | Trigger scraping immediately |
 | `POST` | `/api/analyze` | Trigger sentiment analysis immediately |
+| `POST` | `/api/run` | Full pipeline: scrape → analyze |
+| `GET` | `/api/stats?target_id=` | Sentiment/category summary + tweet count |
+
+### Health
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `GET` | `/health` | Health check |
 
 ---
 
@@ -347,6 +345,10 @@ X has no public API for free-tier users. We use `auth_token` + `ct0` cookies exp
 │   └── scraper/
 │       └── x_client.py         # Playwright X scraper (GraphQL intercept)
 ├── web/                        # Next.js 15 dashboard
+│   ├── Dockerfile              # Web container image
+│   ├── package.json            # Node.js dependencies
+│   ├── next.config.js          # Next.js config (proxy timeout)
+│   ├── tsconfig.json           # TypeScript config
 │   └── src/
 │       ├── app/
 │       │   ├── page.tsx        # Main page with tab navigation
@@ -405,6 +407,6 @@ X has no public API for free-tier users. We use `auth_token` + `ct0` cookies exp
 | `OLLAMA_BASE_URL` | `http://ollama:11434` | Ollama server URL |
 | `LLM_MODEL` | `gemma4:e2b` | Ollama model to use |
 | `MAX_SCROLLS` | `10` | Default scroll depth (overridden from Settings UI) |
-| `WORKER_POLL_INTERVAL` | `30` | Scheduler polling interval in seconds |
+| `WORKER_POLL_INTERVAL` | `30` | Scheduler polling interval in seconds (code default: 15) |
 | `PGADMIN_EMAIL` | `admin@socialscope.dev` | pgAdmin login email |
 | `PGADMIN_PASSWORD` | `admin` | pgAdmin login password |

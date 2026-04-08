@@ -15,7 +15,6 @@ services:
       OLLAMA_BASE_URL: http://ollama:11434
       LLM_MODEL: ${LLM_MODEL:-gemma4:e2b}
       MAX_SCROLLS: ${MAX_SCROLLS:-10}
-      HEADLESS: "true"
     ports:
       - "8000:8000"
     volumes:
